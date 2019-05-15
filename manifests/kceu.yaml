@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kceu
+spec:
+  ports:
+    - port: 8080
+  selector:
+    k8s-app: kceu
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kceu
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      k8s-app: kceu
+  template:
+    metadata:
+      labels:
+        k8s-app: kceu
+    spec:
+      containers:
+      - name: kceu
+        image: squat/kubeconeu2019:amd64-latest
+        command:
+        - /kceu
+        args:
+        - --port=8080
+        - --stream=http://mjpeg.default.svc.cluster.local:8080
+        - --label=http://darkapi.default.svc.cluster.local:8080/api/yolo
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080

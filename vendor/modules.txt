@@ -1,0 +1,10 @@
+# github.com/blackjack/webcam v0.0.0-20190407142958-6cd3de4f4861
+github.com/blackjack/webcam/examples/http_mjpeg_streamer
+github.com/blackjack/webcam
+github.com/blackjack/webcam/ioctl
+# golang.org/x/image v0.0.0-20190507092727-e4e5bf290fec
+golang.org/x/image/font
+golang.org/x/image/font/basicfont
+golang.org/x/image/math/fixed
+# golang.org/x/sys v0.0.0-20190515190549-87c872767d25
+golang.org/x/sys/unix

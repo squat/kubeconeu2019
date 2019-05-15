@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: darkapi
+spec:
+  ports:
+    - port: 8080
+  selector:
+    k8s-app: darkapi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: darkapi
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      k8s-app: darkapi
+  template:
+    metadata:
+      labels:
+        k8s-app: darkapi
+    spec:
+      containers:
+      - name: darkapi
+        image: squat/darkapi
+        args:
+        - -p
+        - "8080"
+        imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 45
+          periodSeconds: 5
+        ports:
+        - containerPort: 8080
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+      tolerations:
+      - key: "nvidia.com/gpu"
+        effect: "NoSchedule"
+        operator: "Exists"
+      - key: "node-role.kubernetes.io/master"
+        effect: "NoSchedule"
+        operator: "Exists"
