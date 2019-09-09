@@ -77,6 +77,7 @@ bin/$(ARCH)/mjpeg: bin/$(ARCH)
 	    -w /$(PROJECT) \
 	    $(BUILD_IMAGE) \
 	    /bin/sh -c " \
+		GOARCH=$(ARCH) \
 		GOOS=linux \
 	        GOCACHE=/$(PROJECT)/.cache \
 		CGO_ENABLED=0 \
