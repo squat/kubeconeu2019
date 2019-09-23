@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -30,68 +31,110 @@ func main() {
 	label := flag.String("label", "", "URL to labeling service.")
 	flag.Parse()
 	s := NewStream()
+	defer s.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	l := NewLabeler(*label, *stream, s)
+	l.Run(ctx)
 	srv := &http.Server{
-		Addr: fmt.Sprintf(":%d", *port),
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			mpr, err := readerFromURL(*stream)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte(err.Error()))
-				return
-			}
-			stop := make(chan struct{})
-			bc := make(chan []byte)
-			go func() {
-				var buf []byte
-				for {
-					select {
-					case <-stop:
-						return
-					default:
-						part, err := mpr.NextPart()
-						if err != nil {
-							log.Printf("failed to decode next part: %v\n", err)
-						}
-						buf, err = ioutil.ReadAll(part)
-						if err != nil {
-							log.Printf("failed to read part: %v\n", err)
-						}
-						select {
-						case bc <- buf:
-						default:
-						}
-					}
-				}
-			}()
-			go func() {
-				var buf []byte
-				for {
-					select {
-					case <-stop:
-						return
-					case buf = <-bc:
-						img, err := labelImage(*label, buf)
-						if err != nil {
-							log.Printf("failed to label image: %v\n", err)
-							return
-						}
-						s.Update(img)
-						if err != nil {
-							log.Printf("failed to update stream: %v\n", err)
-							return
-						}
-					}
-				}
-			}()
-			s.ServeHTTP(w, r)
-			close(stop)
-		}),
+		Addr:    fmt.Sprintf(":%d", *port),
+		Handler: s,
 	}
 	log.Fatal(srv.ListenAndServe())
 }
 
-func readerFromURL(u string) (*multipart.Reader, error) {
-	req, err := http.NewRequest("GET", u, nil)
+// Labeler fetches MJPEGs from a source, labels them, and published them to a Stream.
+type Labeler struct {
+	label  string
+	src    string
+	stream *Stream
+}
+
+// NewLabeler creates a new Labeler.
+func NewLabeler(label, src string, stream *Stream) *Labeler {
+	return &Labeler{
+		label:  label,
+		stream: stream,
+		src:    src,
+	}
+}
+
+// Run runs the Labeler until the given context is cancelled.
+func (l *Labeler) Run(ctx context.Context) {
+	bc := make(chan []byte)
+	go func() {
+		defer close(bc)
+	outer:
+		for {
+			var buf []byte
+			mprctx, cancel := context.WithCancel(ctx)
+			defer cancel()
+			mpr, err := readerFromURL(mprctx, l.src)
+			if err != nil {
+				log.Printf("failed to create reader from stream source: %v\n", err)
+				log.Println("trying again in 5 seconds")
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(5 * time.Second):
+					continue
+				}
+			}
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					part, err := mpr.NextPart()
+					if err != nil {
+						log.Printf("failed to decode next part: %v\n", err)
+						cancel()
+						continue outer
+					}
+					buf, err = ioutil.ReadAll(part)
+					if err != nil {
+						log.Printf("failed to read part: %v\n", err)
+						cancel()
+						continue outer
+					}
+					select {
+					case bc <- buf:
+					default:
+					}
+				}
+			}
+		}
+	}()
+
+	go func() {
+		var buf []byte
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case buf = <-bc:
+				var err error
+				var img []byte
+				if l.label != "" {
+					// A labeling endpoint was specified.
+					img, err = labelImage(l.label, buf)
+					if err != nil {
+						log.Printf("failed to label image: %v\n", err)
+						continue
+					}
+				} else {
+					// No labeling endpoint was specified.
+					img = make([]byte, len(buf))
+					copy(img, buf)
+				}
+				l.stream.Update(img)
+			}
+		}
+	}()
+}
+
+func readerFromURL(ctx context.Context, u string) (*multipart.Reader, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {
 		return nil, err
 	}

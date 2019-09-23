@@ -22,7 +22,7 @@ DIRTY := $(shell test -z "$$(git diff --shortstat 2>/dev/null)" || echo -dirty)
 VERSION := $(VERSION)$(DIRTY)
 SRC := $(shell find . -type f -name '*.go' -not -path "./vendor/*")
 
-BUILD_IMAGE ?= golang:1.12.1-alpine
+BUILD_IMAGE ?= golang:1.13.0-alpine
 
 build: bin/$(ARCH)/$(BIN) bin/$(ARCH)/mjpeg
 
@@ -88,7 +88,7 @@ bin/$(ARCH)/mjpeg: bin/$(ARCH)
 
 fmt:
 	@echo $(GO_PKGS)
-	gofmt -w -s $(GO_FILES)
+	gofmt -w -s $(SRC)
 
 lint:
 	@echo 'golint $(GO_PKGS)'
@@ -99,20 +99,12 @@ lint:
 		echo "$$lint_res"; \
 		exit 1; \
 	fi
-	@echo 'gofmt -d -s $(GO_FILES)'
-	@fmt_res=$$(gofmt -d -s $(GO_FILES)); if [ -n "$$fmt_res" ]; then \
+	@echo 'gofmt -d -s $(SRC)'
+	@fmt_res=$$(gofmt -d -s $(SRC)); if [ -n "$$fmt_res" ]; then \
 		echo ""; \
 		echo "Gofmt found style issues. Please check the reported issues"; \
 		echo "and fix them if necessary before submitting the code for review:"; \
 		echo "$$fmt_res"; \
-		exit 1; \
-	fi
-	@echo 'yarn --cwd static run lint'
-	@if ! tslint_res=$$(yarn --cwd static run lint); then \
-		echo ""; \
-		echo "tslint found style issues. Please check the reported issues"; \
-		echo "and fix them if necessary before submitting the code for review:"; \
-		echo "$$tslint_res"; \
 		exit 1; \
 	fi
 
