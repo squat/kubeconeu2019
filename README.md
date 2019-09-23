@@ -1,5 +1,8 @@
 # KubeCon EU 2019
 This repository contains the demo code for my KubeCon EU 2019 talk about building multi-cloud clusters using WireGuard.
+
+[![youtube](https://img.youtube.com/vi/iPz_DAOOCKA/0.jpg)](https://www.youtube.com/watch?v=iPz_DAOOCKA)
+
 In this demo we will imagine we are a company like Nest that is running object detection processes on video captured by IoT devices.
 We will run a web-app in the cloud connected to a GPU-powered image detection and labeling service in a different public cloud provider.
 The web-app will stream video from the IoT device over a WireGuard connection to keep the data safe.
