@@ -93,7 +93,7 @@ done
 
 9. Run the video capture service on the "edge":
 ```shell
-docker run --rm --privileged -p 8080:8080 squat/kubeconeu2019:amd64-latest /mjpeg
+docker run --rm --privileged -p 8080:8080 squat/kubeconeu2019 /mjpeg --bind-addr=:8080
 ```
 
 10. Check out the KubeCon application in a browser!

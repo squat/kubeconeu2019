@@ -24,12 +24,12 @@ spec:
     spec:
       containers:
       - name: kceu
-        image: squat/kubeconeu2019:amd64-latest
+        image: squat/kubeconeu2019
         command:
         - /kceu
         args:
         - --port=8080
-        - --stream=http://mjpeg.default.svc.cluster.local:8080
+        - --stream=http://mjpeg.default.svc.cluster.local:8080/mjpeg
         - --label=http://darkapi.default.svc.cluster.local:8080/api/yolo
         imagePullPolicy: Always
         ports:

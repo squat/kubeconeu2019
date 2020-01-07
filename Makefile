@@ -3,13 +3,15 @@ export GO111MODULE=on
 
 ARCH ?= amd64
 ALL_ARCH := amd64 arm arm64
+DOCKER_ARCH := "" "arm v7" "arm64 v8"
+IMAGE_ARCH := amd64 armhf arm64
 BIN := kceu
 PROJECT := kubeconeu2019
 PKG := github.com/squat/$(PROJECT)
 REGISTRY ?= index.docker.io
 IMAGE ?= squat/$(PROJECT)
 
-STREAMER_PKG := github.com/blackjack/webcam/examples/http_mjpeg_streamer
+CAM2IP_PKG := github.com/gen2brain/cam2ip/cmd/cam2ip
 TAG := $(shell git describe --abbrev=0 --tags HEAD 2>/dev/null)
 COMMIT := $(shell git rev-parse HEAD)
 VERSION := $(COMMIT)
@@ -24,7 +26,7 @@ SRC := $(shell find . -type f -name '*.go' -not -path "./vendor/*")
 
 BUILD_IMAGE ?= golang:1.13.0-alpine
 
-build: bin/$(ARCH)/$(BIN) bin/$(ARCH)/mjpeg
+build: bin/$(ARCH)/$(BIN)
 
 build-%:
 	@$(MAKE) --no-print-directory ARCH=$* build
@@ -69,23 +71,6 @@ bin/$(ARCH)/$(BIN): $(SRC) go.mod bin/$(ARCH)
 		go build -mod=vendor -o $@ \
 	    "
 
-bin/$(ARCH)/mjpeg: bin/$(ARCH)
-	@docker run --rm \
-	    -u $$(id -u):$$(id -g) \
-    	    -v $$(pwd):/$(PROJECT) \
-	    -v $$(pwd)/.go/std/$(ARCH):/usr/local/go/pkg/linux_$(ARCH)_static \
-	    -w /$(PROJECT) \
-	    $(BUILD_IMAGE) \
-	    /bin/sh -c " \
-		GOARCH=$(ARCH) \
-		GOOS=linux \
-	        GOCACHE=/$(PROJECT)/.cache \
-		CGO_ENABLED=0 \
-		go build -mod=vendor -o $@ \
-		    $(STREAMER_PKG) \
-	    "
-
-
 fmt:
 	@echo $(GO_PKGS)
 	gofmt -w -s $(SRC)
@@ -111,8 +96,11 @@ lint:
 test: lint vet
 
 container: .container-$(ARCH)-$(VERSION) container-name
-.container-$(ARCH)-$(VERSION): bin/$(ARCH)/$(BIN) Dockerfile bin/$(ARCH)/mjpeg
-	@docker build -t $(IMAGE):$(ARCH)-$(VERSION) --build-arg ARCH=$(ARCH) .
+.container-$(ARCH)-$(VERSION): bin/$(ARCH)/$(BIN) Dockerfile
+	@i=0; for a in $(ALL_ARCH); do [ "$$a" = $(ARCH) ] && break; i=$$((i+1)); done; \
+	ia=""; \
+	j=0; for a in $(IMAGE_ARCH); do [ "$$i" -eq "$$j" ] && ia="$$a" && break; j=$$((j+1)); done; \
+	docker build -t $(IMAGE):$(ARCH)-$(VERSION) --build-arg FROM=multiarch/alpine:$$ia-v3.11 --build-arg GOARCH=$(ARCH) .
 	@docker images -q $(IMAGE):$(ARCH)-$(VERSION) > $@
 
 container-latest: .container-$(ARCH)-$(VERSION)
@@ -121,6 +109,42 @@ container-latest: .container-$(ARCH)-$(VERSION)
 
 container-name:
 	@echo "container: $(IMAGE):$(ARCH)-$(VERSION)"
+
+manifest: .manifest-$(VERSION) manifest-name
+.manifest-$(VERSION): Dockerfile $(addprefix push-, $(ALL_ARCH))
+	@docker manifest create --amend $(IMAGE):$(VERSION) $(addsuffix -$(VERSION), $(addprefix squat/$(PROJECT):, $(ALL_ARCH)))
+	@$(MAKE) --no-print-directory manifest-annotate-$(VERSION)
+	@docker manifest push $(IMAGE):$(VERSION) > $@
+
+manifest-latest: Dockerfile $(addprefix push-latest-, $(ALL_ARCH))
+	@docker manifest create --amend $(IMAGE):latest $(addsuffix -latest, $(addprefix squat/$(PROJECT):, $(ALL_ARCH)))
+	@$(MAKE) --no-print-directory manifest-annotate-latest
+	@docker manifest push $(IMAGE):latest
+	@echo "manifest: $(IMAGE):latest"
+
+manifest-annotate: manifest-annotate-$(VERSION)
+
+manifest-annotate-%:
+	@i=0; \
+	for a in $(ALL_ARCH); do \
+	    annotate=; \
+	    j=0; for da in $(DOCKER_ARCH); do \
+		if [ "$$j" -eq "$$i" ] && [ -n "$$da" ]; then \
+		    annotate="docker manifest annotate $(IMAGE):$* $(IMAGE):$$a-$* --os linux --arch"; \
+		    k=0; for ea in $$da; do \
+			[ "$$k" = 0 ] && annotate="$$annotate $$ea"; \
+			[ "$$k" != 0 ] && annotate="$$annotate --variant $$ea"; \
+			k=$$((k+1)); \
+		    done; \
+		    $$annotate; \
+		fi; \
+		j=$$((j+1)); \
+	    done; \
+	    i=$$((i+1)); \
+	done
+
+manifest-name:
+	@echo "manifest: $(IMAGE_ROOT):$(VERSION)"
 
 push: .push-$(ARCH)-$(VERSION) push-name
 .push-$(ARCH)-$(VERSION): .container-$(ARCH)-$(VERSION)

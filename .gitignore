@@ -1,6 +1,7 @@
 /.cache
 /bin
 .container*
+.manifest*
 .push*
 assets/
 terraform.tfstate*
