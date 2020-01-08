@@ -3,8 +3,7 @@ export GO111MODULE=on
 
 ARCH ?= amd64
 ALL_ARCH := amd64 arm arm64
-DOCKER_ARCH := "" "arm v7" "arm64 v8"
-IMAGE_ARCH := amd64 armhf arm64
+DOCKER_ARCH := "amd64" "arm v7" "arm64 v8"
 BIN := kceu
 PROJECT := kubeconeu2019
 PKG := github.com/squat/$(PROJECT)
@@ -98,9 +97,12 @@ test: lint vet
 container: .container-$(ARCH)-$(VERSION) container-name
 .container-$(ARCH)-$(VERSION): bin/$(ARCH)/$(BIN) Dockerfile
 	@i=0; for a in $(ALL_ARCH); do [ "$$a" = $(ARCH) ] && break; i=$$((i+1)); done; \
-	ia=""; \
-	j=0; for a in $(IMAGE_ARCH); do [ "$$i" -eq "$$j" ] && ia="$$a" && break; j=$$((j+1)); done; \
-	docker build -t $(IMAGE):$(ARCH)-$(VERSION) --build-arg FROM=multiarch/alpine:$$ia-v3.11 --build-arg GOARCH=$(ARCH) .
+	ia=""; iv=""; \
+	j=0; for a in $(DOCKER_ARCH); do \
+	    [ "$$i" -eq "$$j" ] && ia=$$(echo "$$a" | awk '{print $$1}') && iv=$$(echo "$$a" | awk '{print $$2}') && break; j=$$((j+1)); \
+	done; \
+	SHA=$$(docker manifest inspect $(BUILD_IMAGE) | jq '.manifests[] | select(.platform.architecture == "'$$ia'") | if .platform | has("variant") then select(.platform.variant == "'$$iv'") else . end | .digest' -r); \
+	docker build -t $(IMAGE):$(ARCH)-$(VERSION) --build-arg FROM=$(BUILD_IMAGE)@$$SHA --build-arg GOARCH=$(ARCH) .
 	@docker images -q $(IMAGE):$(ARCH)-$(VERSION) > $@
 
 container-latest: .container-$(ARCH)-$(VERSION)
